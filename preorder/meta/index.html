@@ -3,15 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
 <title>一角鯨・餅乾禮盒預購</title>
-<!-- ★ Meta 廣告專用轉址(ad-ops):廣告落地網址永遠填本頁。
-     換後端/表單加來源預填時只改下面 TARGET 兩處(meta + JS),不動廣告=不重置學習期。
-     表單加「從哪裡看到」題後,把 TARGET 換成預填版:viewform?usp=pp_url&entry.<ID>=FB%2FIG廣告 -->
-<meta http-equiv="refresh" content="0; url=https://docs.google.com/forms/d/1I_u9HmLWXkmIPs_TCp1vpJ0LjUHEgnEMa60CQ-ok984/viewform">
+<!--
+  ★ Meta 廣告專用轉址頁 v2（ad-ops / 2026-07-19）
+  廣告落地網址永遠填本頁；廣告端把 utm_* 帶到本頁 URL，本頁再透傳進表單。
+
+  === v2 修的兩個 gate（v1 沒過的原因）===
+  gate#1 UTM 全丟：v1 用 <meta refresh content=0> + 寫死 TARGET 搶在 JS 前跳轉 → 這版去掉 meta refresh、JS 先讀 UTM 再跳。
+  gate#2 Pixel：v1 頁上無 Pixel 且 0 秒即跳 → 這版留 Pixel 插槽，beacon 送出（eventCallback）才轉址。
+
+  === 兩個對抗式審查修正（2026-07-19 workflow）===
+  (A) 不要雙重編碼：location.search 本身已是「瀏覽器百分比編碼態」，不可整段再 encodeURIComponent
+      （否則中文素材名如「馬年 A」會在回覆表變 %E9%A6%AC… 亂碼、人工判讀不了）。
+      作法：用 URLSearchParams 逐值 decode 成人類可讀字串 → 只對整段 encode「一次」→ Google Forms 解碼一次得可讀值。
+  (B) Pixel 不用固定延遲：改 fbq PageView 的 eventCallback 送出即跳 + 1500ms 硬上限
+      （固定 600ms 在慢速 in-app WebView 會在 beacon 發出前離頁，PageView 漏送、LPV 優化失準）。
+
+  === 換後端／表單時只改這裡，不要動廣告連結（動廣告=重置學習期）===
+  FORM_BASE   = 表單正式回應網址（/d/e/ 版，避免 shortlink 轉址掉參數）
+  PARAM_ENTRY = 表單「廣告參數（系統自動帶入，請勿修改）」欄位 entry ID（2026-07-19 建）
+  PIXEL_ID    = 7/25 Meta 帳戶開好後填入即自動啟用；留空則整段 Pixel 略過（填入後務必用 Events Manager 測試事件驗 PageView 綠燈再開 LPV 投放）
+  註：自報題「從哪裡看到這檔預購?」(entry.98536072) 刻意不預填，保留為獨立的自報訊號。
+-->
 <style>
-  body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  html,body{margin:0}
+  body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
     font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
-    background:#f4f8f7;color:#1c2b2b;text-align:center;padding:24px}
+    background:#f4f8f7;color:#1c2b2b;text-align:center;padding:24px;box-sizing:border-box}
   .whale{font-size:46px;line-height:1}
   h1{font-size:19px;margin:14px 0 4px;color:#2a7f7f}
   p{font-size:14px;color:#5a6b6b;margin:2px 0}
@@ -23,10 +42,68 @@
   <div class="whale">🐋</div>
   <h1>一角鯨的海上小旅行・餅乾禮盒預購</h1>
   <p>正帶你到預購表單…</p>
-  <a class="go" id="go" href="https://docs.google.com/forms/d/1I_u9HmLWXkmIPs_TCp1vpJ0LjUHEgnEMa60CQ-ok984/viewform">沒有自動跳轉?點我前往 →</a>
+  <a class="go" id="go" href="https://docs.google.com/forms/d/e/1FAIpQLSfQxvY7puYRz30Y1sv23bDNdyiJMMERMZYNQY5-jbBw1vMN4w/viewform">沒有自動跳轉?點我前往 →</a>
+  <noscript>
+    <p style="margin-top:16px">若未自動跳轉，請點上方按鈕前往預購表單。</p>
+  </noscript>
+
   <script>
-    var TARGET = "https://docs.google.com/forms/d/1I_u9HmLWXkmIPs_TCp1vpJ0LjUHEgnEMa60CQ-ok984/viewform";
-    try { location.replace(TARGET); } catch (e) { location.href = TARGET; }
+  (function () {
+    "use strict";
+
+    var FORM_BASE   = "https://docs.google.com/forms/d/e/1FAIpQLSfQxvY7puYRz30Y1sv23bDNdyiJMMERMZYNQY5-jbBw1vMN4w/viewform";
+    var PARAM_ENTRY = "entry.1010030809"; // 表單「廣告參數」欄
+    var PIXEL_ID    = "";                  // 例:"1234567890" — 填了就自動啟用
+
+    // 1) 讀本頁廣告參數,解成「人類可讀」字串(修正 A:避免雙重編碼)
+    //    location.search 已是編碼態;URLSearchParams 會逐值 decode → 得可讀 key=value。
+    var readable = "";
+    try {
+      var sp = new URLSearchParams(window.location.search);
+      var parts = [];
+      sp.forEach(function (v, k) { parts.push(k + "=" + v); });
+      readable = parts.join("&");
+    } catch (e) {
+      // 極舊 WebView 無 URLSearchParams:退回原字串(去問號),至少不丟資料
+      readable = (window.location.search || "").replace(/^\?/, "");
+    }
+
+    // 2) 組表單預填網址:只 encode「一次」→ Google Forms 解碼一次得可讀值
+    var target = FORM_BASE;
+    if (readable) {
+      target += "?usp=pp_url&" + PARAM_ENTRY + "=" + encodeURIComponent(readable);
+    }
+
+    // 3) 先把 fallback 連結升級成預填版(JS 關掉時仍走無預填的 FORM_BASE)
+    var go = document.getElementById("go");
+    if (go) { go.setAttribute("href", target); }
+
+    // 4) 轉址(只跳一次)
+    var fired = false;
+    function redirect() {
+      if (fired) return;
+      fired = true;
+      try { window.location.replace(target); }
+      catch (e) { window.location.href = target; }
+    }
+
+    // 5) Pixel 插槽(修正 B:beacon 送出即跳,不用固定延遲)。PIXEL_ID 空 → 略過。
+    if (PIXEL_ID) {
+      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+      n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+      window.fbq('init', PIXEL_ID);
+      window.fbq('trackCustom', 'PreorderRedirect', { q: readable });
+      // PageView 帶 eventCallback:beacon 真正送出後才轉址(慢速 in-app 也不漏)
+      window.fbq('track', 'PageView', {}, { eventCallback: redirect });
+      setTimeout(redirect, 1500);  // 硬上限:beacon 掛掉/超慢也不卡在轉址頁
+    } else {
+      setTimeout(redirect, 150);   // 無 Pixel:短暫顯示鯨魚後跳
+      setTimeout(redirect, 1500);  // 保險
+    }
+  })();
   </script>
 </body>
 </html>
