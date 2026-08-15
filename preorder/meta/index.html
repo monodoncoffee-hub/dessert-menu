@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<link rel="preconnect" href="https://connect.facebook.net" crossorigin>
+<link rel="preconnect" href="https://www.facebook.com">
 <title>一角鯨・餅乾禮盒預購</title>
 <!--
   ★ Meta 廣告專用轉址頁 v2（ad-ops / 2026-07-19）
@@ -25,6 +27,18 @@
   PARAM_ENTRY = 表單「廣告參數（系統自動帶入，請勿修改）」欄位 entry ID（2026-07-19 建）
   PIXEL_ID    = 7/25 Meta 帳戶開好後填入即自動啟用；留空則整段 Pixel 略過（填入後務必用 Events Manager 測試事件驗 PageView 綠燈再開 LPV 投放）
   註：自報題「從哪裡看到這檔預購?」(entry.98536072) 刻意不預填，保留為獨立的自報訊號。
+
+  === v3 Pixel 修復（ad-ops / 2026-08-15，方案=05 §7.3-A 甲案）===
+  根因（08-08 確診）：JS Pixel 全靠外部 fbevents.js，慢速 in-app WebView 載不完就被
+  1500ms 硬轉址切走 → 89 次真實到頁 0 事件；桌機必過=假綠燈。
+  修三處：
+  (1) 免 JS 的 1×1 圖片信標（body 開頭）——HTML 一解析即發，不等任何 script，
+      再爛的 in-app 瀏覽器都會載圖；referrerpolicy 讓 fbclid 隨 Referer 送達幫配對。
+  (2) preconnect ×2——幫 JS Pixel 搶回握手時間（它送到的事件配對品質較好，能救多少救多少）。
+  (3) 硬上限 1500→3000ms——給 fbevents.js 多一點完賽時間；手動按鈕恆在，最慢多等 1.5 秒。
+  帳面副作用：JS Pixel 活著的訪客 PageView 記兩次（圖片+JS）——該數字不進任何判決
+  （判決用 Ads Manager 的 LPV），受眾池以「任何 Pixel 活動」計、重複無害。
+  驗收鐵則：必須手機 in-app 實機（Messenger 傳連結給自己點開），桌機必過不算數。
 -->
 <style>
   html,body{margin:0}
@@ -39,6 +53,10 @@
 </style>
 </head>
 <body>
+  <!-- v3(1) 免 JS 圖片信標:HTML 解析即發、不等 fbevents.js,是手機 in-app 環境唯一保證送達的一發 -->
+  <img src="https://www.facebook.com/tr?id=2210613682569549&amp;ev=PageView&amp;noscript=1"
+       height="1" width="1" style="display:none" alt=""
+       referrerpolicy="no-referrer-when-downgrade">
   <div class="whale">🐋</div>
   <h1>一角鯨的海上小旅行・餅乾禮盒預購</h1>
   <p>正帶你到預購表單…</p>
@@ -98,7 +116,7 @@
       window.fbq('trackCustom', 'PreorderRedirect', { q: readable });
       // PageView 帶 eventCallback:beacon 真正送出後才轉址(慢速 in-app 也不漏)
       window.fbq('track', 'PageView', {}, { eventCallback: redirect });
-      setTimeout(redirect, 1500);  // 硬上限:beacon 掛掉/超慢也不卡在轉址頁
+      setTimeout(redirect, 3000);  // 硬上限(v3: 1500→3000):給 fbevents.js 多完賽時間;圖片信標已保底,手動按鈕恆在
     } else {
       setTimeout(redirect, 150);   // 無 Pixel:短暫顯示鯨魚後跳
       setTimeout(redirect, 1500);  // 保險
