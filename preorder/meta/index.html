@@ -40,6 +40,21 @@
   （判決用 Ads Manager 的 LPV），受眾池以「任何 Pixel 活動」計、重複無害。
   驗收鐵則：必須手機 in-app 實機（Messenger 傳連結給自己點開），桌機必過不算數。
 -->
+
+<!--
+  === v4 廣告路切換 EasyStore(ad-ops / 2026-09-01,老闆 08-30 拍板續跑後執行)===
+  改動只有兩處,其餘 v2/v3 的修復一格未動(圖片信標、preconnect、Pixel eventCallback、3000ms 硬上限、只跳一次)。
+  (1) 目標:表單 → 官網商品頁 https://monodoncoffee.com/products/mid-autumn-giftbox
+  (2) 參數透傳的「寫法」整個換掉,這是本次最容易做錯的一格:
+      表單版 = 把 utm_* 壓成一個可讀字串,塞進表單的「廣告參數」欄位(所以要先 decode)。
+      官網版 = 商品頁沒有那個欄位,要的是標準 query string → 必須原樣沿用 location.search 的編碼態。
+      若沿用表單版的 readable(已 decode)去接網址,中文與特殊字元會壞掉;
+      若整段不透傳,fbclid 到不了 monodoncoffee.com、Pixel 生不出 _fbc,而 EasyStore 又是另一個網域、
+      _fbp 也不共用 → 廣告管理員照樣顯示數字,但系統性低估、而且看不出來。
+  ⚠️ 廣告後端一格都不要動:落地網址永遠填本頁,動廣告連結 = significant edit = 重置學習期。
+  ⚠️ 溫客/QR 走的 /preorder/(表單)維持不動到 9/13,年末檔才整併——通路即歸因:
+      官網單 = 廣告路、表單單 = 溫客路。
+-->
 <style>
   html,body{margin:0}
   body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -59,18 +74,17 @@
        referrerpolicy="no-referrer-when-downgrade">
   <div class="whale">🐋</div>
   <h1>一角鯨的海上小旅行・餅乾禮盒預購</h1>
-  <p>正帶你到預購表單…</p>
-  <a class="go" id="go" href="https://docs.google.com/forms/d/e/1FAIpQLSfQxvY7puYRz30Y1sv23bDNdyiJMMERMZYNQY5-jbBw1vMN4w/viewform">沒有自動跳轉?點我前往 →</a>
+  <p>正帶你到預購頁面…</p>
+  <a class="go" id="go" href="https://monodoncoffee.com/products/mid-autumn-giftbox">沒有自動跳轉?點我前往 →</a>
   <noscript>
-    <p style="margin-top:16px">若未自動跳轉，請點上方按鈕前往預購表單。</p>
+    <p style="margin-top:16px">若未自動跳轉，請點上方按鈕前往預購頁面。</p>
   </noscript>
 
   <script>
   (function () {
     "use strict";
 
-    var FORM_BASE   = "https://docs.google.com/forms/d/e/1FAIpQLSfQxvY7puYRz30Y1sv23bDNdyiJMMERMZYNQY5-jbBw1vMN4w/viewform";
-    var PARAM_ENTRY = "entry.1010030809"; // 表單「廣告參數」欄
+    var TARGET_BASE = "https://monodoncoffee.com/products/mid-autumn-giftbox";  // v4(2026-09-01):由表單切成官網商品頁
     var PIXEL_ID    = "2210613682569549";  // Monodon pixel(2019-10-30 建,擁有者=廣告帳戶 1432641863644967)
 
     // 1) 讀本頁廣告參數,解成「人類可讀」字串(修正 A:避免雙重編碼)
@@ -86,10 +100,16 @@
       readable = (window.location.search || "").replace(/^\?/, "");
     }
 
-    // 2) 組表單預填網址:只 encode「一次」→ Google Forms 解碼一次得可讀值
-    var target = FORM_BASE;
-    if (readable) {
-      target += "?usp=pp_url&" + PARAM_ENTRY + "=" + encodeURIComponent(readable);
+    // 2) 組目標網址(v4 關鍵改動:與表單版的做法相反,不要用 readable)
+    //    表單版是把參數「壓成一個字串塞進表單欄位」,所以需要 decode 過的可讀值;
+    //    官網版要的是「標準 query string」——必須原樣沿用 location.search 的編碼態,
+    //    fbclid 才會原封不動抵達 monodoncoffee.com,Pixel 才生得出 _fbc。
+    //    (EasyStore 是另一個網域,_fbp 不共用;少了 _fbc 歸因欄會「有數字但系統性低估」,
+    //     那比空白更危險——空白會被發現,低估不會。)
+    var target = TARGET_BASE;
+    var rawQS = (window.location.search || "").replace(/^\?/, "");
+    if (rawQS) {
+      target += (TARGET_BASE.indexOf("?") >= 0 ? "&" : "?") + rawQS;
     }
 
     // 3) 先把 fallback 連結升級成預填版(JS 關掉時仍走無預填的 FORM_BASE)
