@@ -1,0 +1,12 @@
+
+
+/* 導覽列雙行(英文大／中文小),項目名稱用「｜」分隔 */
+header .header__menu-item.mc-split, .menu-drawer__menu-item.mc-split{display:inline-flex!important;flex-direction:column;align-items:center;gap:3px;line-height:1.1}
+.menu-drawer__menu-item.mc-split{align-items:flex-start}
+.mc-split .mc-en{font-family:'Jost',sans-serif!important;font-weight:400;font-size:12px;letter-spacing:.26em}
+.mc-split .mc-zh{font-family:'Noto Sans TC',sans-serif!important;font-weight:400;font-size:10px;letter-spacing:.14em;opacity:.8}
+header .header__menu-item{padding-top:6px!important;padding-bottom:6px!important}
+
+</style>
+<script>(function(){function run(){document.querySelectorAll('header .header__menu-item, .menu-drawer__menu-item').forEach(function(a){if(a.getAttribute('data-mc-split'))return;var t=(a.textContent).trim();var i=t.indexOf('｜');if(i<0)return;a.setAttribute('data-mc-split','1');var en=t.slice(0,i).trim(),zh=t.slice(i+1).trim();var keep=[].slice.call(a.children).filter(function(c){return /^svg$/i.test(c.tagName)});a.textContent='';var s1=document.createElement('span');s1.className='mc-en';s1.textContent=en;var s2=document.createElement('span');s2.className='mc-zh';s2.textContent=zh;a.appendChild(s1);a.appendChild(s2);keep.forEach(function(c){a.appendChild(c)});a.classList.add('mc-split');});}run();document.addEventListener('DOMContentLoaded',run);window.addEventListener('load',run);})();</script>
+<style>
